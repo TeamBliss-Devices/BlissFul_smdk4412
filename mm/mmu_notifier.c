@@ -40,10 +40,8 @@ void __mmu_notifier_release(struct mm_struct *mm)
 	int id;
 
 	/*
-	 * srcu_read_lock() here will block synchronize_srcu() in
-	 * mmu_notifier_unregister() until all registered
-	 * ->release() callouts this function makes have
-	 * returned.
+	 * SRCU here will block mmu_notifier_unregister until
+	 * ->release returns.
 	 */
 	id = srcu_read_lock(&srcu);
 	spin_lock(&mm->mmu_notifier_mm->lock);
@@ -304,6 +302,10 @@ void mmu_notifier_unregister(struct mmu_notifier *mn, struct mm_struct *mm)
 
 	spin_lock(&mm->mmu_notifier_mm->lock);
 	if (!hlist_unhashed(&mn->hlist)) {
+		/*
+		 * SRCU here will force exit_mmap to wait ->release to finish
+		 * before freeing the pages.
+		 */
 		int id;
 
 		/*
