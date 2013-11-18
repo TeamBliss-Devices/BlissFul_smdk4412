@@ -42,7 +42,19 @@ MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPLv2");
 
 /* Tuneables */
-#define DEBUG                   1
+#define DEBUG                   0
+#define S2W_PWRKEY_DUR          60
+
+#ifdef CONFIG_MACH_MSM8974_HAMMERHEAD
+/* Hammerhead aka Nexus 5 */
+#define S2W_Y_MAX               1920
+#define S2W_X_MAX               1080
+#define S2W_Y_LIMIT             S2W_Y_MAX-130
+#define S2W_X_B1                400
+#define S2W_X_B2                700
+#define S2W_X_FINAL             250
+#else
+/* defaults */
 #define S2W_Y_LIMIT             2350
 #define S2W_X_MAX               1540
 #define S2W_X_B1                500
