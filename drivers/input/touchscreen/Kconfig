@@ -1023,9 +1023,6 @@ config TOUCHSCREEN_ATMEL_MXT540S
 
 source "drivers/input/touchscreen/wacom/Kconfig"
 
-
-	  If unsure, say N.
-
 config TOUCHSCREEN_LGE_SYNAPTICS
 	bool "Synaptics RMI4 driver for LG Touch Driver"
 	depends on I2C
