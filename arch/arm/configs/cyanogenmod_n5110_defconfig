@@ -40,7 +40,11 @@ CONFIG_INIT_ENV_ARG_LIMIT=32
 CONFIG_CROSS_COMPILE=""
 <<<<<<< HEAD:arch/arm/configs/cyanogenmod_n5110_defconfig
 <<<<<<< HEAD:arch/arm/configs/cyanogenmod_n5110_defconfig
+<<<<<<< HEAD:arch/arm/configs/cyanogenmod_n5110_defconfig
 CONFIG_LOCALVERSION=“-Draco-1.6”
+=======
+CONFIG_LOCALVERSION="-OMNI"
+>>>>>>> 9de8607... config: update local version:arch/arm/configs/custom_n8000_defconfig
 =======
 CONFIG_LOCALVERSION="-OMNI"
 >>>>>>> 9de8607... config: update local version:arch/arm/configs/custom_n8000_defconfig
