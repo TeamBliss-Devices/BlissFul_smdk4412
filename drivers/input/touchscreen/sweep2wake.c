@@ -71,6 +71,7 @@ MODULE_LICENSE("GPLv2");
 #define S2W_X_B2                1000
 #define S2W_X_FINAL             300
 #define S2W_PWRKEY_DUR          60
+#endif
 
 /* Resources */
 int s2w_switch = S2W_DEFAULT;
