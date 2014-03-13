@@ -44,7 +44,7 @@ void mhs_set_status(enum mhs_type type, bool status)
 					break;
 		case MHS_CAMERA_STREAM:	mhs_ctx.camera_stream = status;
 #ifdef CONFIG_SND_WOLFSON_SOUND_CONTROL
-					set_mic_level(); //TODO see above
+					//set_mic_level(); //TODO see above
 #endif
 					break;
 		default:		return;
