@@ -947,7 +947,7 @@ static inline unsigned int cfq_cfqq_slice_usage(struct cfq_queue *cfqq,
 			*unaccounted_time = slice_used - cfqq->allocated_slice;
 			slice_used = cfqq->allocated_slice;
 		}
-		if (time_after_eq(cfqq->slice_start, cfqq->dispatch_start))
+		if (time_after(cfqq->slice_start, cfqq->dispatch_start))
 			*unaccounted_time += cfqq->slice_start -
 					cfqq->dispatch_start;
 	}
@@ -978,7 +978,7 @@ static void cfq_group_served(struct cfq_data *cfqd, struct cfq_group *cfqg,
 	cfq_group_service_tree_add(st, cfqg);
 
 	/* This group is being expired. Save the context */
-	if (time_after_eq(cfqd->workload_expires, jiffies)) {
+	if (time_after(cfqd->workload_expires, jiffies)) {
 		cfqg->saved_workload_slice = cfqd->workload_expires
 						- jiffies;
 		cfqg->saved_workload = cfqd->serving_type;
@@ -2213,7 +2213,7 @@ static void choose_service_tree(struct cfq_data *cfqd, struct cfq_group *cfqg)
 	/*
 	 * check workload expiration, and that we still have other queues ready
 	 */
-	if (count && !time_after_eq(jiffies, cfqd->workload_expires))
+	if (count && !time_after(jiffies, cfqd->workload_expires))
 		return;
 
 new_workload:
@@ -2447,7 +2447,7 @@ static inline bool cfq_slice_used_soon(struct cfq_data *cfqd,
 	/* the queue hasn't finished any request, can't estimate */
 	if (cfq_cfqq_slice_new(cfqq))
 		return true;
-	if (time_after_eq(jiffies + cfqd->cfq_slice_idle * cfqq->dispatched,
+	if (time_after(jiffies + cfqd->cfq_slice_idle * cfqq->dispatched,
 		cfqq->slice_end))
 		return true;
 
@@ -2920,7 +2920,6 @@ static void changed_ioprio(struct io_context *ioc, struct cfq_io_context *cic)
 static void cfq_ioc_set_ioprio(struct io_context *ioc)
 {
 	call_for_each_cic(ioc, changed_ioprio);
-	ioc->ioprio_changed = 0;
 }
 
 static void cfq_init_cfqq(struct cfq_data *cfqd, struct cfq_queue *cfqq,
@@ -3212,8 +3211,13 @@ retry:
 		goto err_free;
 
 out:
-	smp_read_barrier_depends();
-	if (unlikely(ioc->ioprio_changed))
+	/*
+	 * test_and_clear_bit() implies a memory barrier, paired with
+	 * the wmb() in fs/ioprio.c, so the value seen for ioprio is the
+	 * new one.
+	 */
+	if (unlikely(test_and_clear_bit(IOC_CFQ_IOPRIO_CHANGED,
+					ioc->ioprio_changed)))
 		cfq_ioc_set_ioprio(ioc);
 
 #ifdef CONFIG_CFQ_GROUP_IOSCHED
@@ -3575,7 +3579,7 @@ static void cfq_completed_request(struct request_queue *q, struct request *rq)
 
 	if (sync) {
 		RQ_CIC(rq)->last_end_request = now;
-		if (!time_after_eq(rq->start_time + cfqd->cfq_fifo_expire[1], now))
+		if (!time_after(rq->start_time + cfqd->cfq_fifo_expire[1], now))
 			cfqd->last_delayed_sync = now;
 	}
 

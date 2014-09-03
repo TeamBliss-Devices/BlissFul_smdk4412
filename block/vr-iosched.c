@@ -73,13 +73,7 @@ return q->elevator->elevator_data;
 static void
 vr_add_rq_rb(struct vr_data *vd, struct request *rq)
 {
-struct request *alias = elv_rb_add(&vd->sort_list, rq);
-
-if (unlikely(alias)) {
-vr_move_request(vd, alias);
-alias = elv_rb_add(&vd->sort_list, rq);
-BUG_ON(alias);
-}
+elv_rb_add(&vd->sort_list, rq);
 
 if (blk_rq_pos(rq) >= vd->last_sector) {
 if (!vd->next_rq || blk_rq_pos(vd->next_rq) > blk_rq_pos(rq))
@@ -224,7 +218,7 @@ if (list_empty(&vd->fifo_list[ddir]))
 return NULL;
 
 rq = rq_entry_fifo(vd->fifo_list[ddir].next);
-if (time_after_eq(jiffies, rq_fifo_time(rq)))
+if (time_after(jiffies, rq_fifo_time(rq)))
 return rq;
 
 return NULL;
@@ -240,7 +234,7 @@ struct request *rq_sync = vr_expired_request(vd, SYNC);
 struct request *rq_async = vr_expired_request(vd, ASYNC);
 
 if (rq_async && rq_sync) {
-if (time_after_eq(rq_fifo_time(rq_async), rq_fifo_time(rq_sync)))
+if (time_after(rq_fifo_time(rq_async), rq_fifo_time(rq_sync)))
 return rq_sync;
 }
 else if (rq_sync)
