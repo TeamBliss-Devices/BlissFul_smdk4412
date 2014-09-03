@@ -25,6 +25,11 @@
 #include <linux/uaccess.h>
 #include <linux/firmware.h>
 #include "wacom_i2c_func.h"
+#include "wacom_i2c_firm.h"
+#include <linux/touchboost_switch.h>
+#ifdef CONFIG_TOUCH_WAKE
+#include <linux/touch_wake.h>
+#endif
 #ifdef CONFIG_EPEN_WACOM_G9PL
 #include "w9002_flash.h"
 #else
@@ -401,6 +406,9 @@ static irqreturn_t wacom_interrupt(int irq, void *dev_id)
 {
 	struct wacom_i2c *wac_i2c = dev_id;
 	wacom_i2c_coord(wac_i2c);
+#ifdef CONFIG_TOUCH_WAKE
+	touch_press();
+#endif
 	return IRQ_HANDLED;
 }
 
@@ -602,13 +610,18 @@ static int wacom_i2c_remove(struct i2c_client *client)
 
 static void wacom_i2c_early_suspend(struct early_suspend *h)
 {
+#if !defined(CONFIG_TOUCH_WAKE)
 	struct wacom_i2c *wac_i2c =
 	    container_of(h, struct wacom_i2c, early_suspend);
-	printk(KERN_DEBUG "[E-PEN] %s.\n", __func__);
-#ifdef WACOM_STATE_CHECK
+	printk(KERN_DEBUG "epen:%s.\n", __func__);
+#if defined(WACOM_STATE_CHECK)
 	cancel_delayed_work_sync(&wac_i2c->wac_statecheck_work);
 #endif
 	wacom_i2c_disable(wac_i2c);
+#if defined(WACOM_CHECK_SUSPEND_ENTER)
+	wac_i2c->suspend_enter = true;
+#endif
+#endif
 }
 
 static void wacom_i2c_resume_work(struct work_struct *work)
@@ -707,9 +720,41 @@ static int wacom_i2c_suspend(struct i2c_client *client, pm_message_t mesg)
 static int wacom_i2c_resume(struct i2c_client *client)
 {
 	wacom_i2c_late_resume();
-	printk(KERN_DEBUG "[E-PEN] %s.\n", __func__);
+	printk(KERN_DEBUG "epen:%s.\n", __func__);
 	return 0;
 }
+#endif
+
+#if defined(CONFIG_TOUCH_WAKE)
+static struct wacom_i2c * touchwake_epen_data;
+void touchscreen_disable_epen(void)
+{
+	if (likely(touchwake_epen_data != NULL) && touchwake_epen_data->pen_insert == false) {
+		printk(KERN_DEBUG "epen:%s.\n", __func__);
+#if defined(WACOM_STATE_CHECK)
+		cancel_delayed_work_sync(&touchwake_epen_data->wac_statecheck_work);
+#endif
+		wacom_i2c_disable(touchwake_epen_data);
+#if defined(WACOM_CHECK_SUSPEND_ENTER)
+		touchwake_epen_data->suspend_enter = true;
+#endif
+	}
+	return;
+}
+EXPORT_SYMBOL(touchscreen_disable_epen);
+
+void touchscreen_enable_epen(void)
+{
+	if (likely(touchwake_epen_data != NULL) && touchwake_epen_data->pen_insert == false) {
+		printk(KERN_DEBUG "epen:%s.\n", __func__);
+#if defined(WACOM_CHECK_SUSPEND_ENTER)
+		touchwake_epen_data->suspend_enter = false;
+#endif
+		wacom_i2c_enable(touchwake_epen_data);
+	}
+	return;
+}
+EXPORT_SYMBOL(touchscreen_enable_epen);
 #endif
 
 static ssize_t epen_firm_update_status_show(struct device *dev,
@@ -718,7 +763,7 @@ static ssize_t epen_firm_update_status_show(struct device *dev,
 {
 	struct wacom_i2c *wac_i2c = dev_get_drvdata(dev);
 
-	printk(KERN_DEBUG "[E-PEN] %s:(%d)\n", __func__,
+	printk(KERN_DEBUG "epen:%s:(%d)\n", __func__,
 	       wac_i2c->wac_feature->firm_update_status);
 
 	if (wac_i2c->wac_feature->firm_update_status == 2)
@@ -735,7 +780,7 @@ static ssize_t epen_firm_version_show(struct device *dev,
 				      struct device_attribute *attr, char *buf)
 {
 	struct wacom_i2c *wac_i2c = dev_get_drvdata(dev);
-	printk(KERN_DEBUG "[E-PEN] %s: 0x%x|0x%X\n", __func__,
+	printk(KERN_DEBUG "epen:%s: 0x%x|0x%X\n", __func__,
 	       wac_i2c->wac_feature->fw_version, Firmware_version_of_file);
 
 	return sprintf(buf, "%04X\t%04X\n",
@@ -747,7 +792,7 @@ static ssize_t epen_firm_version_show(struct device *dev,
 static ssize_t epen_tuning_version_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	printk(KERN_DEBUG "[E-PEN] %s: %s\n", __func__,
+	printk(KERN_DEBUG "epen:%s: %s\n", __func__,
 			tuning_version);
 
 	return sprintf(buf, "%s_%s\n",
@@ -1470,6 +1515,11 @@ static int wacom_i2c_probe(struct i2c_client *client,
 	register_early_suspend(&wac_i2c->early_suspend);
 #endif
 
+#ifdef CONFIG_TOUCH_WAKE
+  touchwake_epen_data = wac_i2c;
+    if (touchwake_epen_data == NULL)
+    pr_err("[TOUCHWAKE] Failed to set touchwake_epen_data\n");
+#endif
 	wac_i2c->dev = device_create(sec_class, NULL, 0, NULL, "sec_epen");
 	if (IS_ERR(wac_i2c->dev)) {
 		printk(KERN_ERR "Failed to create device(wac_i2c->dev)!\n");
