@@ -204,6 +204,14 @@ static void late_resume(struct work_struct *work)
 abort:
 	mutex_unlock(&early_suspend_lock);
 
+#ifdef CONFIG_SPEEDUP_KEYRESUME
+	if (!(unlikely(earlysuspend_old_policy == SCHED_FIFO) || unlikely(earlysuspend_old_policy == SCHED_RR))) {
+		earlysuspend_v.sched_priority = earlysuspend_old_prio;
+		if ((sched_setscheduler(current, earlysuspend_old_policy, &earlysuspend_v)) < 0)
+			printk(KERN_ERR "late_resume: down late_resume failed\n");
+	}
+#endif
+
 	pm_wd_del_timer(&timer);
 }
 
