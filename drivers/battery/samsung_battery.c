@@ -45,6 +45,9 @@
 #include <linux/stmpe811-adc.h>
 #endif
 
+char charge_info_text[30];	// Info text to be shown in config app
+int charge_info_level;		// Actual charge current, negotiated between charger and device
+unsigned int charge_info_cable_type = POWER_SUPPLY_TYPE_BATTERY;	// Actual charger type, default is none
 static char *supply_list[] = {
 	"battery",
 };
@@ -1570,6 +1573,11 @@ charge_ok:
 #if defined(CONFIG_MACH_GC1)
 	pr_err("%s: Updated Cable State(%d)\n", __func__, info->cable_type);
 #endif
+
+	// store current charger type in variable to be used by other
+	// modules, like e.g. touch-to-wake
+	charge_info_cable_type = info->cable_type;
+	
 	switch (info->cable_type) {
 	case POWER_SUPPLY_TYPE_BATTERY:
 		if (!info->pdata->suspend_chging)
