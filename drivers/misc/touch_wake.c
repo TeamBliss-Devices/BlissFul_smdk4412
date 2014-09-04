@@ -25,15 +25,14 @@
 #include <linux/delay.h>
 #include <linux/wakelock.h>
 #include <linux/input.h>
-#include <linux/battery/samsung_battery.h>
+
+#ifdef CONFIG_KERNEL_LED_ALERTS
+#include <linux/kernel_led_alerts.h>
+#include <linux/leds.h>
+#endif
 
 extern void touchscreen_enable(void);
 extern void touchscreen_disable(void);
-#ifdef CONFIG_INPUT_WACOM
-extern void touchscreen_enable_epen(void);
-extern void touchscreen_disable_epen(void);
-#endif
-extern unsigned int charge_info_cable_type;
 
 static bool touchwake_enabled = false;
 static bool touch_disabled = false;
@@ -41,13 +40,18 @@ static bool device_suspended = false;
 static bool timed_out = true;
 static bool prox_near = false;
 static unsigned int touchoff_delay = 2000;
-static bool charger_mode = false;
 
 static void touchwake_touchoff(struct work_struct * touchoff_work);
 static DECLARE_DELAYED_WORK(touchoff_work, touchwake_touchoff);
 static void press_powerkey(struct work_struct * presspower_work);
 static DECLARE_WORK(presspower_work, press_powerkey);
 static DEFINE_MUTEX(lock);
+
+#ifdef CONFIG_KERNEL_LED_ALERTS
+static struct led_trigger touchwake_led_trigger = {
+	.name           = "touchwake",
+};
+#endif
 
 static struct input_dev * powerkey_device;
 static struct wake_lock touchwake_wake_lock;
@@ -66,10 +70,8 @@ static void touchwake_disable_touch(void)
 	pr_info("[TOUCHWAKE] Disable touch controls\n");
 	#endif
 	touchscreen_disable();
-#ifdef CONFIG_INPUT_WACOM
-	touchscreen_disable_epen();
-#endif
 	touch_disabled = true;
+
 	return;
 }
 
@@ -79,9 +81,6 @@ static void touchwake_enable_touch(void)
 	pr_info("[TOUCHWAKE] Enable touch controls\n");
 	#endif
 	touchscreen_enable();
-#ifdef CONFIG_INPUT_WACOM
-	touchscreen_enable_epen();
-#endif
 	touch_disabled = false;
 	return;
 }
@@ -93,19 +92,15 @@ static void touchwake_early_suspend(struct early_suspend * h)
 	#endif
 
 	if (touchwake_enabled) {
-		if ((charge_info_cable_type != POWER_SUPPLY_TYPE_BATTERY) && charger_mode)	{
-			if (timed_out && !prox_near) {
-				#ifdef DEBUG_PRINT
-				pr_info("[TOUCHWAKE] Charger plug mode - keep touch enabled indefinately\n");
-				#endif
-				wake_lock(&touchwake_wake_lock);
-			}
-		}
-		else if (likely(touchoff_delay > 0))	{
+		if (likely(touchoff_delay > 0))	{
 			if (timed_out && !prox_near) {
 				#ifdef DEBUG_PRINT
 				pr_info("[TOUCHWAKE] Early suspend - enable touch delay\n");
 				#endif
+				
+#ifdef CONFIG_KERNEL_LED_ALERTS
+				enable_led_alert(&touchwake_led_trigger, LED_FULL);
+#endif
 				wake_lock(&touchwake_wake_lock);
 
 				schedule_delayed_work(&touchoff_work, msecs_to_jiffies(touchoff_delay));
@@ -116,17 +111,10 @@ static void touchwake_early_suspend(struct early_suspend * h)
 				touchwake_disable_touch();
 			}
 		} else {
-			if (timed_out && !prox_near) {
-				#ifdef DEBUG_PRINT
-				pr_info("[TOUCHWAKE] Early suspend - keep touch enabled indefinately\n");
-				#endif
-				wake_lock(&touchwake_wake_lock);
-			} else {
-				#ifdef DEBUG_PRINT
-				pr_info("[TOUCHWAKE] Early suspend - disable touch immediately (indefinate mode)\n");
-				#endif
-				touchwake_disable_touch();
-			}
+			#ifdef DEBUG_PRINT
+			pr_info("[TOUCHWAKE] Early suspend - keep touch enabled indefinately\n");
+			#endif
+			wake_lock(&touchwake_wake_lock);
 		}
 	} else {
 		#ifdef DEBUG_PRINT
@@ -154,6 +142,9 @@ static void touchwake_late_resume(struct early_suspend * h)
 	if (touch_disabled)
 		touchwake_enable_touch();
 
+#ifdef CONFIG_KERNEL_LED_ALERTS
+	disable_led_alert(&touchwake_led_trigger);
+#endif
 	timed_out = true;
 	device_suspended = false;
 
@@ -171,6 +162,9 @@ static void touchwake_touchoff(struct work_struct * touchoff_work)
 {
 	touchwake_disable_touch();
 	wake_unlock(&touchwake_wake_lock);
+#ifdef CONFIG_KERNEL_LED_ALERTS
+	disable_led_alert(&touchwake_led_trigger);
+#endif
 
 	return;
 }
@@ -190,30 +184,6 @@ static void press_powerkey(struct work_struct * presspower_work)
 	mutex_unlock(&lock);
 
 	return;
-}
-
-static ssize_t touchwake_charger_mode_read(struct device * dev, struct device_attribute * attr, char * buf)
-{
-	return sprintf(buf, "%u\n", (charger_mode ? 1 : 0));
-}
-
-static ssize_t touchwake_charger_mode_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
-{
-	unsigned int ret = -EINVAL;
-	unsigned int val;
-
-	ret = sscanf(buf, "%d", &val);
-
-	if (val == 0)
-		charger_mode = false;
-	else if (val == 1)
-		charger_mode = true;
-
-	#ifdef DEBUG_PRINT
-	pr_info("[TOUCHWAKE] %s: Charger mode set to %d\n", __FUNCTION__, charger_mode);
-	#endif
-	
-	return size;
 }
 
 static ssize_t touchwake_status_read(struct device * dev, struct device_attribute * attr, char * buf)
@@ -275,6 +245,13 @@ static ssize_t touchwake_delay_write(struct device * dev, struct device_attribut
 	return size;
 }
 
+int get_touchoff_delay()
+{   
+
+	return touchoff_delay;
+}
+EXPORT_SYMBOL(get_touchoff_delay);
+
 static ssize_t touchwake_version(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%s\n", TOUCHWAKE_VERSION);
@@ -290,7 +267,6 @@ static ssize_t touchwake_debug(struct device * dev, struct device_attribute * at
 static DEVICE_ATTR(enabled, S_IRUGO | S_IWUGO, touchwake_status_read, touchwake_status_write);
 static DEVICE_ATTR(delay, S_IRUGO | S_IWUGO, touchwake_delay_read, touchwake_delay_write);
 static DEVICE_ATTR(version, S_IRUGO , touchwake_version, NULL);
-static DEVICE_ATTR(charger_mode, S_IRUGO | S_IWUGO, touchwake_charger_mode_read, touchwake_charger_mode_write);
 #ifdef DEBUG_PRINT
 static DEVICE_ATTR(debug, S_IRUGO , touchwake_debug, NULL);
 #endif
@@ -300,7 +276,6 @@ static struct attribute *touchwake_notification_attributes[] =
 	&dev_attr_enabled.attr,
 	&dev_attr_delay.attr,
 	&dev_attr_version.attr,
-	&dev_attr_charger_mode.attr,
 #ifdef DEBUG_PRINT
 	&dev_attr_debug.attr,
 #endif
@@ -385,7 +360,7 @@ EXPORT_SYMBOL(powerkey_released);
 void touch_press(void)
 {   
 	#ifdef DEBUG_PRINT
-	pr_info("[TOUCHWAKE] Touch/E-Pen press detected\n");
+	pr_info("[TOUCHWAKE] Touch press detected\n");
 	#endif
 
 	if (unlikely(device_suspended && touchwake_enabled && !prox_near && mutex_trylock(&lock)))
@@ -437,7 +412,18 @@ static int __init touchwake_control_init(void)
 
 	do_gettimeofday(&last_powerkeypress);
 
+#ifdef CONFIG_KERNEL_LED_ALERTS
+	ret = register_led_alert(&touchwake_led_trigger);
+#endif
+
 	return 0;
 }
+
+static void __exit touchwake_control_exit(void)
+{
+#ifdef CONFIG_KERNEL_LED_ALERTS
+	unregister_led_alert(&touchwake_led_trigger);
+#endif
+} 
 
 device_initcall(touchwake_control_init);
