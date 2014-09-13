@@ -193,7 +193,7 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 export KBUILD_BUILDHOST := $(SUBARCH)
 ARCH		?= arm
-CROSS_COMPILE	?= ../../../prebuilt/linux-x86/toolchain/cortex_a9-linux-gnueabihf-linaro_4.8.3-2014.02/bin/arm-gnueabi-
+CROSS_COMPILE	?= ../../../prebuilt/linux-x86/arm/arm-cortex_a9-linux-gnueabihf-linaro_4.8.3-2014.02/bin/
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
