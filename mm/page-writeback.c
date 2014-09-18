@@ -25,6 +25,7 @@
 #include <linux/task_io_accounting_ops.h>
 #include <linux/blkdev.h>
 #include <linux/mpage.h>
+#include <linux/earlysuspend.h>
 #include <linux/rmap.h>
 #include <linux/percpu.h>
 #include <linux/notifier.h>
@@ -761,15 +762,36 @@ void writeback_set_ratelimit(void)
 }
 
 static int __cpuinit
-ratelimit_handler(struct notifier_block *self, unsigned long u, void *v)
+ratelimit_handler(struct notifier_block *self, unsigned long action, void *hcpu)
 {
-	writeback_set_ratelimit();
-	return NOTIFY_DONE;
+	switch (action & ~CPU_TASKS_FROZEN) {
+	case CPU_ONLINE:
+	case CPU_DEAD:
+		writeback_set_ratelimit();
+		return NOTIFY_OK;
+	default:
+		return NOTIFY_DONE;
+    }
 }
 
 static struct notifier_block __cpuinitdata ratelimit_nb = {
 	.notifier_call	= ratelimit_handler,
 	.next		= NULL,
+};
+
+static void dirty_early_suspend(struct early_suspend *handler)
+{
+	dirty_writeback_interval = 15 * 100;
+}
+
+static void dirty_late_resume(struct early_suspend *handler)
+{
+	dirty_writeback_interval = 5 * 100;
+}
+
+static struct early_suspend dirty_suspend = {
+	.suspend = dirty_early_suspend,
+	.resume = dirty_late_resume,
 };
 
 /*
@@ -794,6 +816,7 @@ void __init page_writeback_init(void)
 {
 	int shift;
 
+	register_early_suspend(&dirty_suspend);
 	writeback_set_ratelimit();
 	register_cpu_notifier(&ratelimit_nb);
 
